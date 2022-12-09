@@ -343,7 +343,10 @@ void umount_handler(struct intr_frame *f) {
 bool
 address_check(char *ptr) {
     struct thread *curr = thread_current();
-    if(is_kernel_vaddr(ptr) || pml4_get_page(curr->pml4, ptr) == NULL) {
+    if(is_kernel_vaddr(ptr)) {
+        return false;
+    }
+    if (spt_find_page(&thread_current()->spt, ptr)== NULL) {
         return false;
     }
     return true;

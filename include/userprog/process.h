@@ -6,6 +6,15 @@
 #define PTR_SIZE 8
 #define EXIT_FALSE -2
 
+struct aux_data {
+	struct file *file ;
+	void * va;
+	bool writable;
+	uint32_t page_read_bytes;
+	uint32_t page_zero_bytes;
+	off_t ofs; 
+};
+
 tid_t process_create_initd (const char *file_name);
 tid_t process_fork (const char *name, struct intr_frame *if_);
 int process_exec (void *f_name);
