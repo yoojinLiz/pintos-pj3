@@ -145,7 +145,7 @@ vm_get_frame (void) {
 	if (kva == NULL) {
 		 PANIC ("no memory. evict & swap out 필요 ");
 	}
-
+	// printf("git rollback~~");
 	struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
 	frame->kva = kva ;
 	frame->page = NULL ; 
