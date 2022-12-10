@@ -59,6 +59,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		struct page * page = (struct page*)malloc(sizeof(struct page)) ;
 		bool (*initializer)(struct page *, enum vm_type, void *) ; 
+		
 
 		if (VM_TYPE(type) == VM_ANON) {
 			initializer = anon_initializer;
@@ -71,6 +72,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		uninit_new(page, upage, init, type, aux, initializer);
 		page->writable = writable; 
+		page->full_type = type ; 
 
 		/* TODO: Insert the page into the spt. */
 		bool res = spt_insert_page(spt, page);
@@ -160,6 +162,14 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	// printf("스택그로스 호출됐오요! \n");
+	/* 하나 이상의 anonymous 페이지를 할당하여 스택 크기를 늘립니다. 
+	이로써 addr은 faulted 주소(폴트가 발생하는 주소) 에서 유효한 주소가 됩니다.  
+	페이지를 할당할 때는 주소를 PGSIZE 기준으로 내림하세요. */
+	void *va = pg_round_down(addr);
+	
+
+
 }
 
 /* Handle the fault on write_protected page */
@@ -176,7 +186,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = spt_find_page(spt, addr);
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	uintptr_t rsp ; //? 어떻게 ~~~~~~~? !
 	if (page == NULL) {
+		if ((addr <= rsp) && (addr >= (rsp- 8))) {
+			// printf("stack growth 케이스 \n");
+			vm_stack_growth(addr);
+		}
 		return false ; 
 	}
 
@@ -240,6 +255,7 @@ hash_first (&i, parent_hash);
 while (hash_next (&i)) {
     struct page *p = hash_entry (hash_cur (&i), struct page, hash_elem);
 	enum vm_type type = page_get_type(p);
+	enum vm_type fulltype = p->full_type;
 	void *va = p-> va; 
 	bool writable = p-> writable;
 	
@@ -248,23 +264,18 @@ while (hash_next (&i)) {
 		vm_initializer *init = p->uninit.init; 
 		struct aux_data *aux = malloc(sizeof(struct aux_data));
 		aux = p->uninit.aux; 
-		if(!vm_alloc_page_with_initializer(type, va, writable, init, aux))
+		if(!vm_alloc_page_with_initializer(fulltype, va, writable, init, aux))
 			return false;
 	} 	
+	
 	else {
-	// 초기화된 페이지 (이미 load는 끝남) - stack 인 경우? 
-		if (p->uninit.type & VM_MARKER_0) { // VM_MARKER와 & 연산을 하면 만약 마커가 있다면 MARKER_0 값이, 없다면 0이 나올것
-            setup_stack (&thread_current()->tf);
-        }
-		else {
-			if (!vm_alloc_page(type, va, writable)){
-				return false; 
-			}
-			if (!vm_claim_page(va)) {
-				return false;
-			}
+	// 초기화된 페이지 (이미 load는 끝남)
+		if (!vm_alloc_page(fulltype, va, writable)){
+			return false; 
 		}
-		
+		if (!vm_claim_page(va)) {
+			return false;
+		}
 		memcpy(va, p->frame->kva, PGSIZE);// 실제 메모리 내용 복사
 	}     
     }

@@ -221,6 +221,11 @@ __do_fork (void **aux) {
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
     /* Project2: System Calls */
+	if(parent->my_exec_file != NULL) {
+        lock_acquire(&file_lock);
+        current->my_exec_file = file_duplicate(parent->my_exec_file);
+        lock_release(&file_lock);
+    }
     
     for(int i = 0; i < FDLIST_LEN; i++) {
         struct file *p_f = (parent->fd_table)[i];
