@@ -854,8 +854,6 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	uint32_t page_zero_bytes = aux->page_zero_bytes ;
 	off_t ofs = aux->ofs; 
 
-	struct frame *frame = page ->frame; 
-
 	file_seek(file, ofs);
 
 	/* Load this page. */
@@ -936,6 +934,7 @@ setup_stack(struct intr_frame *if_) {
 		if (success){
 			/* TODO: If success, set the rsp accordingly. */
 			if_->rsp = USER_STACK;
+			// thread_current()->stack_btm = stack_bottom ;
 		}
 	}	
 	return success;

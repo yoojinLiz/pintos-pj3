@@ -100,7 +100,7 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f) {
     ASSERT(0 <= F_RAX && F_RAX < SYSCALL_CNT);
-
+    thread_current()->rsp = f->rsp; 
     struct system_call syscall = syscall_list[F_RAX];
 
     if(syscall.syscall_num == F_RAX) {
@@ -351,7 +351,6 @@ address_check(char *ptr) {
     }
     return true;
 }
-
 
 void 
 kern_exit(struct intr_frame *f, int status) {

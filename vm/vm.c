@@ -162,14 +162,20 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
-	// printf("스택그로스 호출됐오요! \n");
-	/* 하나 이상의 anonymous 페이지를 할당하여 스택 크기를 늘립니다. 
-	이로써 addr은 faulted 주소(폴트가 발생하는 주소) 에서 유효한 주소가 됩니다.  
-	페이지를 할당할 때는 주소를 PGSIZE 기준으로 내림하세요. */
-	void *va = pg_round_down(addr);
-	
+//	* 1안 (종우 코드 참조)
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	while (!spt_find_page (spt, addr)) {
+		vm_alloc_page (VM_ANON | VM_MARKER_0, addr, true);
+		vm_claim_page (addr);
+		addr += PGSIZE;
+  }
 
-
+//	* 2안
+//   while (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, true)) {
+//     // struct page *pg = spt_find_page(&thread_current()->spt, addr);
+//     vm_claim_page(addr);
+//     addr += PGSIZE;
+//   }
 }
 
 /* Handle the fault on write_protected page */
@@ -183,19 +189,32 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 			
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = spt_find_page(spt, addr);
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-	uintptr_t rsp ; //? 어떻게 ~~~~~~~? !
-	if (page == NULL) {
-		if ((addr <= rsp) && (addr >= (rsp- 8))) {
-			// printf("stack growth 케이스 \n");
-			vm_stack_growth(addr);
-		}
-		return false ; 
-	}
+	void *page_addr = pg_round_down(addr); // 페이지 사이즈로 내려서 spt_find 해야 하기 때문 
+	uint64_t addr_v = (uint64_t)addr;
+	struct page *page = spt_find_page(spt, page_addr);
+	uint64_t MAX_STACK = USER_STACK - (1<<20);
 
-	return vm_do_claim_page (page);
+	uint64_t rsp = NULL;
+	rsp = user ? f->rsp : thread_current()->rsp; 
+
+	if (is_kernel_vaddr(addr)) 
+		return false;
+
+	//? 종우 코드 (어떤 의미인지 아직 잘 모르겠어서 질문 남겨 놓음..!)
+	if (!not_present && write)
+    	return false;
+
+	/* TODO: Validate the fault */
+	if (page == NULL) {
+		if (addr_v > MAX_STACK && addr_v < USER_STACK && addr_v >= rsp -8) {
+			vm_stack_growth(page_addr);
+			page = spt_find_page(spt, page_addr);
+		}
+		else { 
+			return false ; 
+		}
+	}
+return vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -246,7 +265,6 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst ,
 		struct supplemental_page_table *src ) {
-// supplemental_page_table_copy (&current->spt, &parent->spt) 이렇게 호출됨 
 struct hash *parent_hash = &src->hash_spt ; // 
 struct hash *curr_hash = &dst->hash_spt ; 
 
@@ -267,7 +285,6 @@ while (hash_next (&i)) {
 		if(!vm_alloc_page_with_initializer(fulltype, va, writable, init, aux))
 			return false;
 	} 	
-	
 	else {
 	// 초기화된 페이지 (이미 load는 끝남)
 		if (!vm_alloc_page(fulltype, va, writable)){
@@ -278,7 +295,7 @@ while (hash_next (&i)) {
 		}
 		memcpy(va, p->frame->kva, PGSIZE);// 실제 메모리 내용 복사
 	}     
-    }
+	}
 	return true;
 }
 
