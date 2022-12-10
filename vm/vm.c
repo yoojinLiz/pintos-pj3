@@ -1,10 +1,10 @@
 /* vm.c: Generic interface for virtual memory objects. */
 
+#include "userprog/process.h"
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
-#include "userprog/process.h"
 
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
@@ -239,7 +239,7 @@ struct hash_iterator i;
 hash_first (&i, parent_hash);
 while (hash_next (&i)) {
     struct page *p = hash_entry (hash_cur (&i), struct page, hash_elem);
-	enum vm_type type = page_get_type(p);	
+	enum vm_type type = page_get_type(p);
 	void *va = p-> va; 
 	bool writable = p-> writable;
 	
@@ -252,18 +252,23 @@ while (hash_next (&i)) {
 			return false;
 	} 	
 	else {
-	// 초기화된 페이지 (이미 load는 끝남)
-		if (!vm_alloc_page(type, va, writable)){
-			return false; 
+	// 초기화된 페이지 (이미 load는 끝남) - stack 인 경우? 
+		if (p->uninit.type & VM_MARKER_0) { // VM_MARKER와 & 연산을 하면 만약 마커가 있다면 MARKER_0 값이, 없다면 0이 나올것
+            setup_stack (&thread_current()->tf);
+        }
+		else {
+			if (!vm_alloc_page(type, va, writable)){
+				return false; 
+			}
+			if (!vm_claim_page(va)) {
+				return false;
+			}
 		}
-		if (!vm_claim_page(va)) {
-			return false;
-		}
+		
 		memcpy(va, p->frame->kva, PGSIZE);// 실제 메모리 내용 복사
 	}     
     }
 	return true;
-	 //!!! setup stack 을 호출해서 marked 된 것들을 셋업되게 해야 한다 
 }
 
 /* Free the resource hold by the supplemental page table */
@@ -272,4 +277,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	hash_clear (&spt->hash_spt, clear_func);
+	// hash_destroy (&spt->hash_spt, clear_func);
 }
