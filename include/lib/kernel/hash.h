@@ -100,5 +100,6 @@ uint64_t hash_int (int);
 //* 해시함수 추가 (project3)
 unsigned page_hash (const struct hash_elem *p_, void *aux);
 bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux);
+void clear_func (struct hash_elem *elem, void *aux);
 
 #endif /* lib/kernel/hash.h */

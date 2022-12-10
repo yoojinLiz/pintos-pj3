@@ -410,3 +410,8 @@ page_less (const struct hash_elem *a_,
 
   return a->va < b->va;
 }
+
+void clear_func (struct hash_elem *elem, void *aux) {
+	struct page *page = hash_entry(elem, struct page, hash_elem);
+	vm_dealloc_page(page);
+}
