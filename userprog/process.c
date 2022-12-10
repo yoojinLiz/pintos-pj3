@@ -861,6 +861,7 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	}
 	// memset(frame->kva + page_read_bytes, 0, page_zero_bytes);
 	memset(page->va + page_read_bytes, 0, page_zero_bytes);
+	free(aux);  //! [test] aux는 더이상 사용되지 않으니까 여기서 바로 free 
 	return true ;
 }
 

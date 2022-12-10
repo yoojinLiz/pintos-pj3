@@ -29,7 +29,7 @@ bool
 anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &anon_ops;
-
+	// 주의 : uninit에 남아있는 aux 건드리면 안 됨 ! (lazy_load_segment 에서 aux가 사용될 것이기 때문에! )
 	struct anon_page *anon_page = &page->anon;
 }
 
@@ -49,4 +49,8 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	if (page->frame){
+		page->frame->page = NULL;		
+	}
+	free(page->frame);
 }
