@@ -846,10 +846,8 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	// printf("로드확인\n");
+
 	struct file *file = aux->file ;
-	// void * va = aux-> va;
-	// bool writable = aux->writable ;
 	uint32_t page_read_bytes = aux->page_read_bytes ;
 	uint32_t page_zero_bytes = aux->page_zero_bytes ;
 	off_t ofs = aux->ofs; 
@@ -857,14 +855,13 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	file_seek(file, ofs);
 
 	/* Load this page. */
-	// if (file_read(file, frame->kva, page_read_bytes) != (int)page_read_bytes)
 	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
 	{
 		return false;
 	}
-	// memset(frame->kva + page_read_bytes, 0, page_zero_bytes);
+	
 	memset(page->va + page_read_bytes, 0, page_zero_bytes);
-	free(aux);  //! [test] aux는 더이상 사용되지 않으니까 여기서 바로 free 
+	free(aux);  
 	return true ;
 }
 

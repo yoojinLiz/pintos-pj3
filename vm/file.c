@@ -1,9 +1,14 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
-#include <round.h>
 #include "vm/vm.h"
-#include "threads/mmu.h"
+#include "threads/vaddr.h"
+#include "lib/string.h"
+#include "lib/round.h"
+#include "threads/malloc.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"1
+#include "threads/mmu.h"
+
 
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
@@ -60,6 +65,7 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
   	size_t zero_bytes = ROUND_UP (length, PGSIZE) - length;
 
 	void *cur = addr;
+	void *mapped_va = addr;
 	struct supplemental_page_table *spt = &thread_current ()->spt.hash_spt;
 	for (size_t cur_ = 0; cur_ < length; cur_ += PGSIZE)
 		if (spt_find_page (spt, addr + cur_))
@@ -82,6 +88,9 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 			return NULL;
 		}
 
+		struct page *page = spt_find_page(&thread_current()->spt, addr);
+		page->file.mapped_va = mapped_va ; 
+
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
@@ -97,4 +106,21 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 /* Do the munmap */
 void
 do_munmap (void *addr) {
+  while (true) {
+        struct page* page = spt_find_page(&thread_current()->spt, addr);
+        
+        if (page == NULL)
+            break;
+
+        struct aux_data * aux = (struct aux_data *) page->uninit.aux;
+        
+        // dirty(사용되었던) bit 체크
+        if(pml4_is_dirty(thread_current()->pml4, page->va)) {
+            file_write_at(aux->file, addr, aux->page_read_bytes, aux->ofs);
+            pml4_set_dirty (thread_current()->pml4, page->va, 0);
+        }
+
+        pml4_clear_page(thread_current()->pml4, page->va);
+        addr += PGSIZE;
+    }
 }

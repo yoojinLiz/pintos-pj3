@@ -310,15 +310,19 @@ void mmap_handler(struct intr_frame *f) {
  }
 else {
     struct file *file = fd_table_get_file(fd);
+    // lock_acquire(&file_lock);
     F_RAX = do_mmap(addr, length, writable, file, offset);
+    // lock_release(&file_lock);
 }
  
 
 }
 
 void mnumap_handler(struct intr_frame *f) {
-
-}
+  void *addr = F_ARG1;
+  if(addr == pg_round_down(addr)) {
+    do_munmap(addr);
+}}
 
 void chdir_handler(struct intr_frame *f) {
 

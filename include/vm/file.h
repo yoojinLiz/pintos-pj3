@@ -7,6 +7,10 @@ struct page;
 enum vm_type;
 
 struct file_page {
+	vm_initializer *init;
+	enum vm_type type;
+	void *aux;
+	void *mapped_va ;
 };
 
 void vm_file_init (void);

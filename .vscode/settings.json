@@ -37,6 +37,7 @@
         "timer.h": "c",
         "io.h": "c",
         "intr-stubs.h": "c",
-        "synch.h": "c"
+        "synch.h": "c",
+        "vm.h": "c"
     }
 }
