@@ -106,21 +106,22 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 /* Do the munmap */
 void
 do_munmap (void *addr) {
-  while (true) {
-        struct page* page = spt_find_page(&thread_current()->spt, addr);
-        
-        if (page == NULL)
-            break;
+    struct supplemental_page_table *spt = &thread_current()->spt;
+    struct page *target;
+    void *buffer = addr;
 
-        struct aux_data * aux = (struct aux_data *) page->uninit.aux;
-        
-        // dirty(사용되었던) bit 체크
-        if(pml4_is_dirty(thread_current()->pml4, page->va)) {
-            file_write_at(aux->file, addr, aux->page_read_bytes, aux->ofs);
-            pml4_set_dirty (thread_current()->pml4, page->va, 0);
-        }
-
-        pml4_clear_page(thread_current()->pml4, page->va);
-        addr += PGSIZE;
+    target = spt_find_page(spt, addr);
+    if(target == NULL
+        || page_get_type(target) != VM_FILE
+        || target->file.mapped_va != addr) {
+        PANIC("do_munmap() : unexpected address %p", addr);
+    }
+	
+	// 페이지가 존재하는 경우
+    while(target != NULL && target->file.mapped_va == addr) {
+        hash_delete(&spt->hash_spt, &target->hash_elem);
+        vm_dealloc_page(target);
+        buffer += PGSIZE;
+        target = spt_find_page(spt, buffer);
     }
 }

@@ -196,7 +196,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (is_kernel_vaddr(addr)) 
 		return false;
 
-	//? 종우 코드 (어떤 의미인지 아직 잘 모르겠어서 질문 남겨 놓음..!)
+	/* physical page는 존재하나, 
+       writable하지 않은 address에 write를 시도해서 일어난 fault인 경우, 
+       할당하지 않고 즉시 false를 반환한다. */
 	if (!not_present && write)
     	return false;
 
