@@ -18,6 +18,8 @@
 #include "filesys/file.h"
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
+#include "vm/file.h"
+#include "threads/mmu.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -295,6 +297,22 @@ void close_handler(struct intr_frame *f) {
 
 /* PROJECT3 ~~~~~ */
 void mmap_handler(struct intr_frame *f) {
+
+ void *addr = F_ARG1;
+ size_t length = F_ARG1;
+ int writable = F_ARG2;
+ int fd = F_ARG3;
+ off_t offset = F_ARG4;
+ struct supplemental_page_table *spt = &thread_current()->spt ; 
+
+ if (length == 0 || addr != pg_round_down(addr) || spt_find_page(spt, addr)  || addr ==1 || fd ==0 || fd ==1 ) {
+    F_RAX = false ; 
+ }
+else {
+    struct file *file = fd_table_get_file(fd);
+    F_RAX = do_mmap(addr, length, writable, file, offset);
+}
+ 
 
 }
 
