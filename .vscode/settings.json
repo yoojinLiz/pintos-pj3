@@ -38,6 +38,7 @@
         "io.h": "c",
         "intr-stubs.h": "c",
         "synch.h": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "intq.h": "c"
     }
 }

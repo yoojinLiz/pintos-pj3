@@ -299,25 +299,67 @@ void close_handler(struct intr_frame *f) {
 
 /* PROJECT3 ~~~~~ */
 void mmap_handler(struct intr_frame *f) {
+  void *addr = F_ARG1;
+  size_t length = F_ARG2;
+  int writable = F_ARG3;
+  int fd = F_ARG4;
+  off_t offset = F_ARG5;
 
- void *addr = F_ARG1;
- size_t length = F_ARG1;
- int writable = F_ARG2;
- int fd = F_ARG3;
- off_t offset = F_ARG4;
- struct supplemental_page_table *spt = &thread_current()->spt ; 
+  bool success = true;
 
- if (length == 0 || addr != pg_round_down(addr) || spt_find_page(spt, addr)  || addr ==1 || fd ==0 || fd ==1 ) {
-    F_RAX = false ; 
- }
-else {
-    struct file *file = fd_table_get_file(fd);
-    lock_acquire(&file_lock);
-    F_RAX = do_mmap(addr, length, writable, file, offset);
-    lock_release(&file_lock);
-}
+  if (is_kernel_vaddr (addr) || is_kernel_vaddr (length) ||
+      is_kernel_vaddr (addr + length)) {
+    success = false;
+    goto result;
+  }
+
+  // clang-format off
+  if( addr == NULL || pg_ofs(addr) != 0
+   || length == 0
+   || fd == 0 || fd == 1 || fd == 2
+   || pg_ofs(offset) != 0) {
+    success = false;
+    goto result;
+  }
+  // clang-format on
+
+  struct file *file = fd_table_get_file (fd);
+//   struct file *old_file = fd_table_get_file (fd);
+//   if (old_file == NULL) {
+//     success = false;
+//     goto result;
+//   }
+
+//   struct file *file = file_reopen (old_file);
+  if (file == NULL) {
+    success = false;
+    goto result;
+  }
+
+result:
+  if (success)
+    F_RAX = do_mmap (addr, length, writable, file, offset);
+  else
+    F_RAX = NULL;
+//  void *addr = F_ARG1;
+//  size_t length = F_ARG1;
+//  int writable = F_ARG2;
+//  int fd = F_ARG3;
+//  off_t offset = F_ARG4;
+//  struct supplemental_page_table *spt = &thread_current()->spt ; 
+
+//  if (length == 0 | pg_ofs(addr)!=0 || addr != pg_round_down(addr) || spt_find_page(spt, addr) || addr ==0 || fd ==0 || fd ==1|| fd ==2) {
+//     F_RAX = false ; 
+//  }
  
-
+// else {
+//     struct file *file = fd_table_get_file(fd);
+//     file = file_reopen (file);
+//     lock_acquire(&file_lock);
+//     F_RAX = do_mmap(addr, length, writable, file, offset);
+//     lock_release(&file_lock);
+// }
+ 
 }
 
 void mnumap_handler(struct intr_frame *f) {
@@ -366,6 +408,9 @@ void umount_handler(struct intr_frame *f) {
 /* 여기서 부터는 system call handler 아님 */
 bool
 address_check(bool write, char *ptr) {
+    if (ptr == NULL){
+        return false ;
+    }
     struct thread *curr = thread_current();
     struct page *p = spt_find_page(&curr->spt, ptr);
     if (p == NULL) {

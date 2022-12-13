@@ -865,6 +865,26 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	return true ;
 }
 
+bool
+mmap_lazy_load (struct page *page, struct aux_data *aux) {
+	struct file *file = aux->file ;
+	uint32_t page_read_bytes = aux->page_read_bytes ;
+	uint32_t page_zero_bytes = aux->page_zero_bytes ;
+	off_t ofs = aux->ofs; 
+	struct list *mmap_list = &thread_current()->spt.mmap_list ; 
+
+	file_seek(file, ofs);
+
+	/* Load this page. */
+	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
+		return false;
+	memset(page->va + page_read_bytes, 0, page_zero_bytes);
+	list_push_back(mmap_list, &page->mmap_elem);
+	// printf("list_push_back 완료. 이때 p->va는 %p \n", page->va);
+	page->file.aux = aux; 
+	return true ;
+}
+
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
  * memory are initialized, as follows:

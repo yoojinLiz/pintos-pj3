@@ -199,8 +199,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* physical page는 존재하나, 
        writable하지 않은 address에 write를 시도해서 일어난 fault인 경우, 
        할당하지 않고 즉시 false를 반환한다. */
-	if (!not_present && write)
-    	return false;
+	if (!not_present && write){
+    	return false;}
 
 	/* TODO: Validate the fault */
 	struct page *page = spt_find_page(spt, page_addr);
@@ -257,7 +257,8 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init (&spt->hash_spt, page_hash, page_less, NULL); 
+	struct thread *curr = thread_current() ;
+	hash_init (&curr->spt.hash_spt, page_hash, page_less, NULL); 
 }
 
 /* Copy supplemental page table from src to dst */
@@ -266,6 +267,8 @@ supplemental_page_table_copy (struct supplemental_page_table *dst ,
 		struct supplemental_page_table *src ) {
 struct hash *parent_hash = &src->hash_spt ; // 
 struct hash *curr_hash = &dst->hash_spt ; 
+struct list *parent_list = &src->mmap_list;
+struct list *curr_list = &dst->mmap_list; 
 
 struct hash_iterator i;
 hash_first (&i, parent_hash);
@@ -274,7 +277,7 @@ while (hash_next (&i)) {
 	enum vm_type type = page_get_type(p);
 	enum vm_type fulltype = p->full_type;
 	void *va = p-> va; 
-	bool writable = p-> writable;
+	bool writable = p-> writable;  
 	
 	if (p->operations->type == VM_UNINIT) {
 	// 초기화 안 된 페이지
@@ -303,6 +306,12 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	
+	struct list *mmap_list = &spt->mmap_list;
+	while (!list_empty(mmap_list)) {
+		struct list_elem *cur = list_begin(mmap_list);
+		struct page *page = list_entry(cur, struct page, mmap_elem);
+		do_munmap(page->va); 
+	}
 	hash_clear (&spt->hash_spt, clear_func);
-	// hash_destroy (&spt->hash_spt, clear_func);
 }

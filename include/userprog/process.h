@@ -16,6 +16,7 @@ struct aux_data {
 };
 
 bool lazy_load_segment (struct page *page, struct aux_data *aux) ;
+bool mmap_lazy_load (struct page *page, struct aux_data *aux) ;
 tid_t process_create_initd (const char *file_name);
 tid_t process_fork (const char *name, struct intr_frame *if_);
 int process_exec (void *f_name);

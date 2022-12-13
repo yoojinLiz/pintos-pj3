@@ -34,6 +34,10 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+ 	file_page->type = type;
+    file_page->aux = page->anon.aux;
+
+    return true;
 }
 
 /* Swap in the page by read contents from the file. */
@@ -64,9 +68,8 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 	size_t read_bytes = length;
   	size_t zero_bytes = ROUND_UP (length, PGSIZE) - length;
 
-	void *cur = addr;
-	void *mapped_va = addr;
-	struct supplemental_page_table *spt = &thread_current ()->spt.hash_spt;
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+
 	for (size_t cur_ = 0; cur_ < length; cur_ += PGSIZE)
 		if (spt_find_page (spt, addr + cur_))
 			return NULL; // 하나라도 겹치면 안되므로! 
@@ -78,25 +81,21 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 		struct aux_data *aux = (struct aux_data *)calloc(1, sizeof(struct aux_data));
 		if (aux == NULL)
 			return NULL;
-
-		aux->file = file;
+		aux->file = file_reopen (file);;
+		// aux->file = file;
 		aux->page_read_bytes = page_read_bytes;
 		aux->page_zero_bytes = page_zero_bytes;
 		aux->ofs = offset;	
 
-		if (!vm_alloc_page_with_initializer (VM_FILE, cur, writable, lazy_load_segment, aux)) {
+		if (!vm_alloc_page_with_initializer (VM_FILE, addr, writable, mmap_lazy_load, aux)) {
 			return NULL;
 		}
-
-		struct page *page = spt_find_page(&thread_current()->spt, addr);
-		page->file.mapped_va = mapped_va ; 
-
+		
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		offset += PGSIZE;
 		addr += PGSIZE;
-		cur += PGSIZE;
 		}
 
 	/* 성공하면 파일이 매핑된 가상 주소를 반환해야 해 ... */
@@ -106,22 +105,36 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 /* Do the munmap */
 void
 do_munmap (void *addr) {
+
     struct supplemental_page_table *spt = &thread_current()->spt;
-    struct page *target;
+    struct page *page = spt_find_page(spt, addr);
     void *buffer = addr;
 
-    target = spt_find_page(spt, addr);
-    if(target == NULL
-        || page_get_type(target) != VM_FILE
-        || target->file.mapped_va != addr) {
+    if(page == NULL || page_get_type(page) != VM_FILE) {
         PANIC("do_munmap() : unexpected address %p", addr);
     }
-	
-	// 페이지가 존재하는 경우
-    while(target != NULL && target->file.mapped_va == addr) {
-        hash_delete(&spt->hash_spt, &target->hash_elem);
-        vm_dealloc_page(target);
-        buffer += PGSIZE;
-        target = spt_find_page(spt, buffer);
+
+	// 페이지가 존재하고, 페이지 타입이 FILE 인 경우
+    while( page != NULL) {
+		enum intr_level old_level;
+		struct aux_data *aux = &page->file.aux ; 
+		struct file* file = aux->file; 
+		uint32_t page_read_bytes = aux->page_read_bytes ;
+		uint32_t page_zero_bytes = aux->page_zero_bytes ;
+		off_t ofs = aux->ofs; 
+
+		if (pml4_is_dirty (thread_current ()->pml4, addr)) {
+			old_level = intr_disable ();
+			file_write_at (file, addr, page_read_bytes, ofs);
+			intr_set_level (old_level);
+		}
+		addr += PGSIZE;
+
+		spt_remove_page (spt, page);
+        vm_dealloc_page(page);
+
+        hash_delete(&spt->hash_spt, &page->hash_elem);
+    	list_remove (&page->mmap_elem);
+    	page = spt_find_page (spt, addr);
     }
 }
