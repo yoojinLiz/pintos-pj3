@@ -4,6 +4,8 @@
 #include "threads/palloc.h"
 #include "hash.h"
 #include "filesys/file.h"
+#include "threads/synch.h"
+
 
 enum vm_type {
 	/* page not initialized */
@@ -95,7 +97,7 @@ struct page_operations {
 struct supplemental_page_table {
 	struct hash hash_spt ;
 	struct list mmap_list ;
-	// struct lock spt_lock;
+	struct lock spt_lock;
 };
 
 #include "threads/thread.h"

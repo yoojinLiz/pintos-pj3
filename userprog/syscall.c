@@ -310,10 +310,12 @@ void mmap_handler(struct intr_frame *f) {
 
     /* Check validity for mmap. */
     if (fd < 2 || fd_table_get_file(fd) == NULL
-        || addr == NULL
+        || addr <= NULL
         || addr != pg_round_down(addr)
         || is_kernel_vaddr(addr) || is_kernel_vaddr (addr + length)
+        || (offset % PGSIZE) != 0
         || length <= 0
+        || length >= 0x8004000000  //? what is it? 
         || file_length (fd_table_get_file(fd)) <= 0
         || spt_find_page (spt, pg_round_down(addr))
     ) {
@@ -336,7 +338,7 @@ void mmap_handler(struct intr_frame *f) {
 }
 
 void mnumap_handler(struct intr_frame *f) {
-    void *addr = F_ARG1;
+   void *addr = f->R.rdi;
 	struct supplemental_page_table *spt = &thread_current()->spt;
 	struct page *page;
 	int page_cnt;
@@ -347,12 +349,11 @@ void mnumap_handler(struct intr_frame *f) {
 		|| (page_cnt = page->page_cnt) == 0)
 		return;
 
-	// lock_acquire (&spt->spt_lock);
+	lock_acquire (&spt->spt_lock);
 
 	do_munmap (addr);
 
 	/* Remove from mmap_list. */
-
 	struct list_elem *e;
 	struct list *list = &spt->mmap_list;
 	for (e = list_begin (list); e != list_end (list); e = list_next (e)) {
@@ -369,11 +370,7 @@ void mnumap_handler(struct intr_frame *f) {
 		addr += PGSIZE;
 	}
 
-	// lock_release (&spt->spt_lock);
-
-
-//   if(addr == pg_round_down(addr)) {
-//     do_munmap(addr);
+	lock_release (&spt->spt_lock);
 }
 
 void chdir_handler(struct intr_frame *f) {

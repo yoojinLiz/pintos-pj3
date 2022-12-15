@@ -74,6 +74,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		uninit_new(page, upage, init, type, aux, initializer);
 		page->writable = writable; 
 		page->full_type = type ; 
+		page->page_cnt = 0 ; 
 
 		/* TODO: Insert the page into the spt. */
 		bool res = spt_insert_page(spt, page);
@@ -260,7 +261,7 @@ void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	struct thread *curr = thread_current() ;
 	hash_init (&curr->spt.hash_spt, page_hash, page_less, NULL); 
-	// lock_init(&spt->spt_lock);
+	lock_init(&spt->spt_lock);
 }
 
 /* Copy supplemental page table from src to dst */
@@ -309,11 +310,25 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 	
+	// struct list *mmap_list = &spt->mmap_list;
+	// while (!list_empty(mmap_list)) {
+	// 	struct list_elem *cur = list_begin(mmap_list);
+	// 	struct page *page = list_entry(cur, struct page, mmap_elem);
+	// 	do_munmap(page->va); 
+	// }
+	// hash_clear (&spt->hash_spt, clear_func);
+
+	/* Unmap file pages. Writeback will also operated here. */
 	struct list *mmap_list = &spt->mmap_list;
-	while (!list_empty(mmap_list)) {
-		struct list_elem *cur = list_begin(mmap_list);
-		struct page *page = list_entry(cur, struct page, mmap_elem);
-		do_munmap(page->va); 
+	while ( ! list_empty (mmap_list)) {
+		struct page *page = list_entry (list_pop_front (mmap_list), struct page, mmap_elem);
+		ASSERT (page->page_cnt != 0);
+		do_munmap (page->va);
 	}
-	hash_clear (&spt->hash_spt, clear_func);
+	/* Destroy and re-init hash table. */
+	struct hash *h = &spt->hash_spt;
+
+	hash_destroy (h, clear_func);
+	hash_init (h, page_hash, page_less, NULL);
+
 }

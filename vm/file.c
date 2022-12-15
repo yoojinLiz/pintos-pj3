@@ -140,46 +140,87 @@ do_mmap (void *addr, size_t length, int writable,struct file *file, off_t offset
 		addr += PGSIZE;
 		offset += PGSIZE;
 	}
+
+	/* Push the start page into mmap list. */
+	struct page *start_page = spt_find_page (spt, start_addr);
+	start_page->page_cnt = page_cnt;
+	list_push_back (&spt->mmap_list, &start_page->mmap_elem);
+
+	return start_addr;
 }
 
 /* Do the munmap */
 void
 do_munmap (void *addr) {
-    struct supplemental_page_table *spt = &thread_current()->spt;
-    struct page *page = spt_find_page(spt, addr);
-    // struct page *page = spt_find_page(&spt->mmap_list, addr);
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	uint64_t *pml4 = thread_current()->pml4;
+	struct page *page;
+	int page_cnt;
+	struct aux_data *aux;
+	struct file *file;
+	void *start_addr = addr;
 
-    if(page == NULL || page_get_type(page) != VM_FILE) {
-        // PANIC("do_munmap() : unexpected address %p", addr);
-		return ;
-    }
+	page = spt_find_page (spt, start_addr);
+	page_cnt = page->page_cnt;
+	
+	/* Iterate as page counts. */
+	for (int i=0; i < page_cnt; i++) {
+		page = spt_find_page (spt, addr);
+		aux = page->file.aux;
+		file = aux->file;
 
-	// 페이지가 존재하고, 페이지 타입이 FILE 인 경우
-    while( page != NULL && page_get_type(page) == VM_FILE ) {
-		struct aux_data *aux = &page->file.aux ; 
-		struct file* file = aux->file; 
-		uint32_t page_read_bytes = aux->page_read_bytes ;
-		uint32_t page_zero_bytes = aux->page_zero_bytes ;
-		off_t ofs = aux->ofs; 
+		/* Stuff below is only for the initialized pages. */
+		if (page->frame) {
+			/* If the page is dirty, write back to the file. */
+			if (pml4_is_dirty (pml4, addr)){
+				lock_acquire(&file_lock);
+				file_write_at (file, addr, aux->page_read_bytes, aux->ofs);
+				lock_release(&file_lock);
+			}
 
-		if (pml4_is_dirty (thread_current ()->pml4, addr)) {
-  			lock_acquire(&file_lock);
-			file_write_at (file, addr, page_read_bytes, ofs);
-  			lock_release(&file_lock);
+			/* Remove page from pml4. */
+			pml4_clear_page (pml4, addr);
 		}
+
+		/* Advance. */
 		addr += PGSIZE;
-		// printf("1111\n");
-		spt_remove_page (spt, page); // hash delete 및 dealloc 
-		// printf("2222\n");
+	}
 
-		lock_acquire(&file_lock);
-    	list_remove (&page->mmap_elem);  
-		lock_release(&file_lock);
+    // struct supplemental_page_table *spt = &thread_current()->spt;
+    // struct page *page = spt_find_page(spt, addr);
+    // // struct page *page = spt_find_page(&spt->mmap_list, addr);
 
-		// printf("444\n");
-		// printf("addr :: %p \n", addr);
+    // if(page == NULL || page_get_type(page) != VM_FILE) {
+    //     // PANIC("do_munmap() : unexpected address %p", addr);
+	// 	return ;
+    // }
+
+	// // 페이지가 존재하고, 페이지 타입이 FILE 인 경우
+    // while( page != NULL && page_get_type(page) == VM_FILE ) {
+	// 	struct aux_data *aux = &page->file.aux ; 
+	// 	struct file* file = aux->file; 
+	// 	uint32_t page_read_bytes = aux->page_read_bytes ;
+	// 	uint32_t page_zero_bytes = aux->page_zero_bytes ;
+	// 	off_t ofs = aux->ofs; 
+
+	// 	if (pml4_is_dirty (thread_current ()->pml4, addr)) {
+  	// 		lock_acquire(&file_lock);
+	// 		file_write_at (file, addr, page_read_bytes, ofs);
+  	// 		lock_release(&file_lock);
+	// 	}
+	// 	addr += PGSIZE;
+	// 	// printf("1111\n");
+	// 	spt_remove_page (spt, page); // hash delete 및 dealloc 
+	// 	// printf("2222\n");
+
+	// 	lock_acquire(&file_lock);
+    // 	list_remove (&page->mmap_elem);  
+	// 	lock_release(&file_lock);
+
+	// 	// printf("444\n");
+	// 	// printf("addr :: %p \n", addr);
 		
-		addr += PGSIZE; 
-    	page = spt_find_page (spt, addr); 
-    }
+	// 	addr += PGSIZE; 
+    // 	page = spt_find_page (spt, addr); 
+    // }
 	}
