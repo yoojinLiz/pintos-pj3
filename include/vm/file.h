@@ -10,6 +10,7 @@ struct file_page {
 	vm_initializer *init;
 	enum vm_type type;
 	void *aux;
+	bool (*page_initializer) (struct page *, enum vm_type, void *kva);
 	void *mapped_va ;
 };
 

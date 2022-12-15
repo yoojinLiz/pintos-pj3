@@ -356,6 +356,7 @@ process_exit (void) {
 	struct thread *curr = thread_current ();
     struct thread *parent = curr->parent_process;
     int curr_exit_status = curr->exit_status;
+	bool flag = false;
 
     if(curr->pml4 != NULL) {
         printf("%s: exit(%d)\n",curr->name, curr_exit_status);
@@ -363,20 +364,26 @@ process_exit (void) {
 
     process_cleanup ();
 
+	if(!lock_held_by_current_thread(&file_lock)) {
+		lock_acquire(&file_lock);
+		flag = true;
+	}	
+
     /* 실행하던 파일 닫기 */
     if(curr->my_exec_file != NULL) {
-        lock_acquire(&file_lock);
+        // lock_acquire(&file_lock);
         file_close(curr->my_exec_file);
-        lock_release(&file_lock);
+        // lock_release(&file_lock);
         curr->my_exec_file = NULL;
     }
 
     /* fd table의 파일 닫기 */
-    lock_acquire(&file_lock);
+    // lock_acquire(&file_lock);
     for(int i = 0; i < FDLIST_LEN; i++) {
         file_close(curr->fd_table[i]);
     }
-    lock_release(&file_lock);
+
+	if (flag) lock_release(&file_lock);
 
     /* child_list의 child_list_elem들을 free() 한다. */
     enum intr_level old_level;
@@ -788,7 +795,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* Add the page to the process's address space. */
 		if (!install_page (upage, kpage, writable)) {
-			printf("fail\n");
+			"fail\n");
 			palloc_free_page (kpage);
 			return false;
 		}
@@ -865,25 +872,6 @@ lazy_load_segment (struct page *page, struct aux_data *aux) {
 	return true ;
 }
 
-bool
-mmap_lazy_load (struct page *page, struct aux_data *aux) {
-	struct file *file = aux->file ;
-	uint32_t page_read_bytes = aux->page_read_bytes ;
-	uint32_t page_zero_bytes = aux->page_zero_bytes ;
-	off_t ofs = aux->ofs; 
-	struct list *mmap_list = &thread_current()->spt.mmap_list ; 
-
-	file_seek(file, ofs);
-
-	/* Load this page. */
-	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
-		return false;
-	memset(page->va + page_read_bytes, 0, page_zero_bytes);
-	list_push_back(mmap_list, &page->mmap_elem);
-	// printf("list_push_back 완료. 이때 p->va는 %p \n", page->va);
-	page->file.aux = aux; 
-	return true ;
-}
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual

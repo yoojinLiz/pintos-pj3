@@ -1,3 +1,4 @@
+
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "userprog/process.h"
@@ -195,11 +196,11 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	if (is_kernel_vaddr(addr)) 
 		return false;
-
+	// printf("확인 중 %p \n", addr);
 	/* physical page는 존재하나, 
        writable하지 않은 address에 write를 시도해서 일어난 fault인 경우, 
        할당하지 않고 즉시 false를 반환한다. */
-	if (!not_present && write){
+	if ((!not_present) && write){
     	return false;}
 
 	/* TODO: Validate the fault */
@@ -220,6 +221,7 @@ return vm_do_claim_page (page);
  * DO NOT MODIFY THIS FUNCTION. */
 void
 vm_dealloc_page (struct page *page) {
+	
 	destroy (page);
 	free (page);
 }
@@ -250,7 +252,6 @@ vm_do_claim_page (struct page *page) {
 	if (result == false) {
 		return false ; 
 	}
-
 	return swap_in (page, frame->kva);
 }
 
@@ -259,6 +260,7 @@ void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	struct thread *curr = thread_current() ;
 	hash_init (&curr->spt.hash_spt, page_hash, page_less, NULL); 
+	// lock_init(&spt->spt_lock);
 }
 
 /* Copy supplemental page table from src to dst */

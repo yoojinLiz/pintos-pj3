@@ -1,12 +1,13 @@
 /* file.c: Implementation of memory backed file object (mmaped object). */
 
+#include <list.h>
 #include "vm/vm.h"
 #include "threads/vaddr.h"
 #include "lib/string.h"
 #include "lib/round.h"
 #include "threads/malloc.h"
 #include "userprog/process.h"
-#include "userprog/syscall.h"1
+#include "userprog/syscall.h"
 #include "threads/mmu.h"
 
 
@@ -32,10 +33,13 @@ bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	page->operations = &file_ops;
-
 	struct file_page *file_page = &page->file;
- 	file_page->type = type;
-    file_page->aux = page->anon.aux;
+
+	/* Store uninit page elements for page copy. */
+	file_page->init = page->uninit.init;
+	file_page->type = page->uninit.type;
+	file_page->aux = page->uninit.aux;
+	file_page->page_initializer = page->uninit.page_initializer;
 
     return true;
 }
@@ -44,6 +48,32 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
+	struct supplemental_page_table *spt = &thread_current()->spt;
+
+	/* TODO: For swap-in case. (Must not enter in first page fault case) */
+
+	/* Load aux data. */
+	struct aux_data *aux = file_page->aux;
+	struct file *file = aux->file;
+	off_t ofs = aux->ofs;
+	size_t page_read_bytes = aux->page_read_bytes;
+	size_t page_zero_bytes = aux->page_zero_bytes;
+	
+	/* Set old dirty bit status. */ 
+	//? 이 과정이 왜 필요한지 아직 확실히 모르겠음 
+	bool old_dirty = pml4_is_dirty (thread_current()->pml4, page->va);
+
+	/* Load this page. */
+	if (file_read_at (file, page->va, page_read_bytes, ofs) != (int) page_read_bytes)
+		return false;
+
+	memset (page->va + page_read_bytes, 0, page_zero_bytes);
+
+	/* Set dirty bit to old one. */
+	//? 이 과정이 왜 필요한지 아직 확실히 모르겠음 22222
+	pml4_set_dirty (thread_current()->pml4, page->va, old_dirty);
+
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -64,59 +94,68 @@ file_backed_destroy (struct page *page) {
 
 /* Do the mmap */
 void *
-do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offset) {
-	size_t read_bytes = length;
-  	size_t zero_bytes = ROUND_UP (length, PGSIZE) - length;
+do_mmap (void *addr, size_t length, int writable,struct file *file, off_t offset) {
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	void *start_addr = addr;
+	int page_cnt = 0;
 
-	struct supplemental_page_table *spt = &thread_current ()->spt;
+	/* Set read_bytes and zero_bytes. */
+	uint32_t read_bytes, zero_bytes, readable_bytes;
+	if ((readable_bytes = file_length (file) - offset) <= 0)
+		return NULL;
+	read_bytes = length <= readable_bytes ? length : readable_bytes;
+	zero_bytes = PGSIZE - (read_bytes % PGSIZE);
 
-	for (size_t cur_ = 0; cur_ < length; cur_ += PGSIZE)
-		if (spt_find_page (spt, addr + cur_))
-			return NULL; // 하나라도 겹치면 안되므로! 
+	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
 
+	/* Check the addresses to prevent overlap any existing pages. */
+	for (; addr < (start_addr + read_bytes + zero_bytes); addr += PGSIZE) {
+		/* Also, count pages here. */
+		page_cnt += 1;
+		if (spt_find_page (spt, addr))
+			return NULL;
+	}
+
+	/* Allocate each page with initializer. */
+	addr = start_addr;
 	while (read_bytes > 0 || zero_bytes > 0) {
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		struct aux_data *aux = (struct aux_data *)calloc(1, sizeof(struct aux_data));
-		if (aux == NULL)
-			return NULL;
-		aux->file = file_reopen (file);;
-		// aux->file = file;
+		/* Setup auxiliary data. We will use reopened file
+		   because file may closed or removed by other process.*/
+		struct aux_data *aux = calloc (1, sizeof(struct aux_data));
+		aux->file = file;
+		aux->ofs = offset;
 		aux->page_read_bytes = page_read_bytes;
 		aux->page_zero_bytes = page_zero_bytes;
-		aux->ofs = offset;	
 
-		if (!vm_alloc_page_with_initializer (VM_FILE, addr, writable, mmap_lazy_load, aux)) {
-			return NULL;
-		}
-		
+		/* Call the alloc function. */
+		if (!vm_alloc_page_with_initializer (VM_FILE, addr, writable,file_backed_swap_in, aux))
+			PANIC("do_mmap: vm_alloc_page failed.");
+
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
-		offset += PGSIZE;
 		addr += PGSIZE;
-		}
-
-	/* 성공하면 파일이 매핑된 가상 주소를 반환해야 해 ... */
-	return addr ; 
+		offset += PGSIZE;
 	}
+}
 
 /* Do the munmap */
 void
 do_munmap (void *addr) {
-
     struct supplemental_page_table *spt = &thread_current()->spt;
     struct page *page = spt_find_page(spt, addr);
-    void *buffer = addr;
+    // struct page *page = spt_find_page(&spt->mmap_list, addr);
 
     if(page == NULL || page_get_type(page) != VM_FILE) {
-        PANIC("do_munmap() : unexpected address %p", addr);
+        // PANIC("do_munmap() : unexpected address %p", addr);
+		return ;
     }
 
 	// 페이지가 존재하고, 페이지 타입이 FILE 인 경우
-    while( page != NULL) {
-		enum intr_level old_level;
+    while( page != NULL && page_get_type(page) == VM_FILE ) {
 		struct aux_data *aux = &page->file.aux ; 
 		struct file* file = aux->file; 
 		uint32_t page_read_bytes = aux->page_read_bytes ;
@@ -124,17 +163,23 @@ do_munmap (void *addr) {
 		off_t ofs = aux->ofs; 
 
 		if (pml4_is_dirty (thread_current ()->pml4, addr)) {
-			old_level = intr_disable ();
+  			lock_acquire(&file_lock);
 			file_write_at (file, addr, page_read_bytes, ofs);
-			intr_set_level (old_level);
+  			lock_release(&file_lock);
 		}
 		addr += PGSIZE;
+		// printf("1111\n");
+		spt_remove_page (spt, page); // hash delete 및 dealloc 
+		// printf("2222\n");
 
-		spt_remove_page (spt, page);
-        vm_dealloc_page(page);
+		lock_acquire(&file_lock);
+    	list_remove (&page->mmap_elem);  
+		lock_release(&file_lock);
 
-        hash_delete(&spt->hash_spt, &page->hash_elem);
-    	list_remove (&page->mmap_elem);
-    	page = spt_find_page (spt, addr);
+		// printf("444\n");
+		// printf("addr :: %p \n", addr);
+		
+		addr += PGSIZE; 
+    	page = spt_find_page (spt, addr); 
     }
-}
+	}

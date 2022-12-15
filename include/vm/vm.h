@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 #include "hash.h"
+#include "filesys/file.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -52,6 +53,8 @@ struct page {
 	struct list_elem mmap_elem; 
 	enum vm_type full_type ; //vm_type with markers
 
+	int page_cnt;
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
@@ -92,6 +95,7 @@ struct page_operations {
 struct supplemental_page_table {
 	struct hash hash_spt ;
 	struct list mmap_list ;
+	// struct lock spt_lock;
 };
 
 #include "threads/thread.h"
