@@ -266,8 +266,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 
 /* Copy supplemental page table from src to dst */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst ,
-		struct supplemental_page_table *src ) {
+supplemental_page_table_copy (struct supplemental_page_table *dst, struct supplemental_page_table *src ) {
 struct hash *parent_hash = &src->hash_spt ; // 
 struct hash *curr_hash = &dst->hash_spt ; 
 struct list *parent_list = &src->mmap_list;
@@ -319,8 +318,9 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	// hash_clear (&spt->hash_spt, clear_func);
 
 	/* Unmap file pages. Writeback will also operated here. */
+
 	struct list *mmap_list = &spt->mmap_list;
-	while ( ! list_empty (mmap_list)) {
+	while (!list_empty (mmap_list)) {
 		struct page *page = list_entry (list_pop_front (mmap_list), struct page, mmap_elem);
 		ASSERT (page->page_cnt != 0);
 		do_munmap (page->va);

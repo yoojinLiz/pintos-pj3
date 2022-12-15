@@ -31,8 +31,12 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &anon_ops;
 	// 주의 : uninit에 남아있는 aux 건드리면 안 됨 ! (lazy_load_segment 에서 aux가 사용될 것이기 때문에! )
 	struct anon_page *anon_page = &page->anon;
-    anon_page->type = type;
+
+	anon_page->init = page->uninit.init;
+	anon_page->type = page->uninit.type;
 	anon_page->aux = page->uninit.aux;
+	anon_page->page_initializer = page->uninit.page_initializer;
+
 }
 
 /* Swap in the page by read contents from the swap disk. */
