@@ -59,10 +59,6 @@ file_backed_swap_in (struct page *page, void *kva) {
 	size_t page_read_bytes = aux->page_read_bytes;
 	size_t page_zero_bytes = aux->page_zero_bytes;
 	
-	/* Set old dirty bit status. */ 
-	//? 이 과정이 왜 필요한지 아직 확실히 모르겠음 
-	bool old_dirty = pml4_is_dirty (thread_current()->pml4, page->va);
-
 	/* Load this page. */
 	if (file_read_at (file, page->va, page_read_bytes, ofs) != (int) page_read_bytes)
 		return false;
@@ -70,8 +66,7 @@ file_backed_swap_in (struct page *page, void *kva) {
 	memset (page->va + page_read_bytes, 0, page_zero_bytes);
 
 	/* Set dirty bit to old one. */
-	//? 이 과정이 왜 필요한지 아직 확실히 모르겠음 22222
-	pml4_set_dirty (thread_current()->pml4, page->va, old_dirty);
+	pml4_set_dirty (thread_current()->pml4, page->va, 0);
 
 	return true;
 }
@@ -177,7 +172,6 @@ do_munmap (void *addr) {
 				file_write_at (file, addr, aux->page_read_bytes, aux->ofs);
 				lock_release(&file_lock);
 			}
-
 			/* Remove page from pml4. */
 			pml4_clear_page (pml4, addr);
 		}
@@ -185,42 +179,4 @@ do_munmap (void *addr) {
 		/* Advance. */
 		addr += PGSIZE;
 	}
-
-    // struct supplemental_page_table *spt = &thread_current()->spt;
-    // struct page *page = spt_find_page(spt, addr);
-    // // struct page *page = spt_find_page(&spt->mmap_list, addr);
-
-    // if(page == NULL || page_get_type(page) != VM_FILE) {
-    //     // PANIC("do_munmap() : unexpected address %p", addr);
-	// 	return ;
-    // }
-
-	// // 페이지가 존재하고, 페이지 타입이 FILE 인 경우
-    // while( page != NULL && page_get_type(page) == VM_FILE ) {
-	// 	struct aux_data *aux = &page->file.aux ; 
-	// 	struct file* file = aux->file; 
-	// 	uint32_t page_read_bytes = aux->page_read_bytes ;
-	// 	uint32_t page_zero_bytes = aux->page_zero_bytes ;
-	// 	off_t ofs = aux->ofs; 
-
-	// 	if (pml4_is_dirty (thread_current ()->pml4, addr)) {
-  	// 		lock_acquire(&file_lock);
-	// 		file_write_at (file, addr, page_read_bytes, ofs);
-  	// 		lock_release(&file_lock);
-	// 	}
-	// 	addr += PGSIZE;
-	// 	// printf("1111\n");
-	// 	spt_remove_page (spt, page); // hash delete 및 dealloc 
-	// 	// printf("2222\n");
-
-	// 	lock_acquire(&file_lock);
-    // 	list_remove (&page->mmap_elem);  
-	// 	lock_release(&file_lock);
-
-	// 	// printf("444\n");
-	// 	// printf("addr :: %p \n", addr);
-		
-	// 	addr += PGSIZE; 
-    // 	page = spt_find_page (spt, addr); 
-    // }
 	}

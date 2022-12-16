@@ -8,8 +8,6 @@
 
 struct aux_data {
 	struct file *file ;
-	// void * va;
-	// bool writable;
 	uint32_t page_read_bytes;
 	uint32_t page_zero_bytes;
 	off_t ofs; 

@@ -151,7 +151,6 @@ vm_get_frame (void) {
 	if (kva == NULL) {
 		 PANIC ("no memory. evict & swap out 필요 ");
 	}
-	// printf("git rollback~~");
 	struct frame *frame = (struct frame *)malloc(sizeof(struct frame));
 	frame->kva = kva ;
 	frame->page = NULL ; 
@@ -164,20 +163,12 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
-//	* 1안 (종우 코드 참조)
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	while (!spt_find_page (spt, addr)) {
 		vm_alloc_page (VM_ANON | VM_MARKER_0, addr, true);
 		vm_claim_page (addr);
 		addr += PGSIZE;
   }
-
-//	* 2안
-//   while (vm_alloc_page(VM_ANON | VM_MARKER_0, addr, true)) {
-//     // struct page *pg = spt_find_page(&thread_current()->spt, addr);
-//     vm_claim_page(addr);
-//     addr += PGSIZE;
-//   }
 }
 
 /* Handle the fault on write_protected page */
@@ -197,9 +188,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	if (is_kernel_vaddr(addr)) 
 		return false;
-	// printf("확인 중 %p \n", addr);
-	/* physical page는 존재하나, 
-       writable하지 않은 address에 write를 시도해서 일어난 fault인 경우, 
+	/* physical page는 존재하나, writable하지 않은 address에 write를 시도해서 일어난 fault인 경우, 
        할당하지 않고 즉시 false를 반환한다. */
 	if ((!not_present) && write){
     	return false;}
@@ -308,17 +297,8 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	
-	// struct list *mmap_list = &spt->mmap_list;
-	// while (!list_empty(mmap_list)) {
-	// 	struct list_elem *cur = list_begin(mmap_list);
-	// 	struct page *page = list_entry(cur, struct page, mmap_elem);
-	// 	do_munmap(page->va); 
-	// }
-	// hash_clear (&spt->hash_spt, clear_func);
 
 	/* Unmap file pages. Writeback will also operated here. */
-
 	struct list *mmap_list = &spt->mmap_list;
 	while (!list_empty (mmap_list)) {
 		struct page *page = list_entry (list_pop_front (mmap_list), struct page, mmap_elem);
@@ -327,8 +307,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	}
 	/* Destroy and re-init hash table. */
 	struct hash *h = &spt->hash_spt;
-
-	hash_destroy (h, clear_func);
-	hash_init (h, page_hash, page_less, NULL);
-
+	hash_clear (&spt->hash_spt, clear_func);
 }

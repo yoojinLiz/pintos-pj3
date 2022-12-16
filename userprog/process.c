@@ -908,8 +908,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         aux = (struct aux_data *)calloc(1, sizeof(struct aux_data));
         
         aux->file = file;
-		// aux-> va = upage; 
-		// aux->writable = writable; 
         aux->page_read_bytes = page_read_bytes;
         aux->page_zero_bytes = page_zero_bytes;
         aux->ofs = ofs;	
@@ -941,7 +939,6 @@ setup_stack(struct intr_frame *if_) {
 		if (success){
 			/* TODO: If success, set the rsp accordingly. */
 			if_->rsp = USER_STACK;
-			// thread_current()->stack_btm = stack_bottom ;
 		}
 	}	
 	return success;
