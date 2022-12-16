@@ -205,6 +205,13 @@ __do_fork (void **aux) {
     }
 
 	process_activate (current);
+
+	/* Project2: System Calls */
+	if(parent->my_exec_file != NULL) {
+        lock_acquire(&file_lock);
+        current->my_exec_file = file_duplicate(parent->my_exec_file);
+        lock_release(&file_lock);
+    }
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
@@ -220,7 +227,7 @@ __do_fork (void **aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-    /* Project2: System Calls */
+
     
     for(int i = 0; i < FDLIST_LEN; i++) {
         struct file *p_f = (parent->fd_table)[i];
@@ -351,6 +358,7 @@ process_exit (void) {
 	struct thread *curr = thread_current ();
     struct thread *parent = curr->parent_process;
     int curr_exit_status = curr->exit_status;
+	bool flag = false;
 
     if(curr->pml4 != NULL) {
         printf("%s: exit(%d)\n",curr->name, curr_exit_status);
@@ -358,20 +366,26 @@ process_exit (void) {
 
     process_cleanup ();
 
+	if(!lock_held_by_current_thread(&file_lock)) {
+		lock_acquire(&file_lock);
+		flag = true;
+	}	
+
     /* 실행하던 파일 닫기 */
     if(curr->my_exec_file != NULL) {
-        lock_acquire(&file_lock);
+        // lock_acquire(&file_lock);
         file_close(curr->my_exec_file);
-        lock_release(&file_lock);
+        // lock_release(&file_lock);
         curr->my_exec_file = NULL;
     }
 
     /* fd table의 파일 닫기 */
-    lock_acquire(&file_lock);
+    // lock_acquire(&file_lock);
     for(int i = 0; i < FDLIST_LEN; i++) {
         file_close(curr->fd_table[i]);
     }
-    lock_release(&file_lock);
+
+	if (flag) lock_release(&file_lock);
 
     /* child_list의 child_list_elem들을 free() 한다. */
     enum intr_level old_level;
@@ -485,7 +499,7 @@ struct ELF64_PHDR {
 #define ELF ELF64_hdr
 #define Phdr ELF64_PHDR
 
-static bool setup_stack (struct intr_frame *if_);
+// static bool setup_stack (struct intr_frame *if_);
 static bool validate_segment (const struct Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
@@ -783,7 +797,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 		/* Add the page to the process's address space. */
 		if (!install_page (upage, kpage, writable)) {
-			printf("fail\n");
+			"fail\n");
 			palloc_free_page (kpage);
 			return false;
 		}
@@ -836,33 +850,30 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, struct aux_data *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	// printf("로드확인\n");
+
 	struct file *file = aux->file ;
-	void * va = aux-> va;
-	bool writable = aux->writable ;
 	uint32_t page_read_bytes = aux->page_read_bytes ;
 	uint32_t page_zero_bytes = aux->page_zero_bytes ;
 	off_t ofs = aux->ofs; 
 
-	struct frame *frame = page ->frame; 
-
 	file_seek(file, ofs);
 
 	/* Load this page. */
-	// if (file_read(file, frame->kva, page_read_bytes) != (int)page_read_bytes)
 	if (file_read(file, page->va, page_read_bytes) != (int)page_read_bytes)
 	{
 		return false;
 	}
-	// memset(frame->kva + page_read_bytes, 0, page_zero_bytes);
+	
 	memset(page->va + page_read_bytes, 0, page_zero_bytes);
+	// free(aux);  
 	return true ;
 }
+
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -897,8 +908,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         aux = (struct aux_data *)calloc(1, sizeof(struct aux_data));
         
         aux->file = file;
-		aux-> va = upage; 
-		aux->writable = writable; 
         aux->page_read_bytes = page_read_bytes;
         aux->page_zero_bytes = page_zero_bytes;
         aux->ofs = ofs;	
@@ -916,7 +925,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
-static bool
+bool // static 붙어있던거 지움..(vm.c lazy load에서 갖다 써야해서)
 setup_stack(struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);

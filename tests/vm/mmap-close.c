@@ -17,11 +17,18 @@ test_main (void)
 
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
   CHECK ((map = mmap(ACTUAL, 4096, 0, handle, 0)) != MAP_FAILED, "mmap \"sample.txt\"");
-
+  // msg("테스트 스크립트 mmap 후 : ACTUAL addr= %p \n\n", ACTUAL);
+  // msg("테스트 스크립트 mmap 후 : sample = %s \n\n", sample);
+  // msg("테스트 스크립트 mmap 후 : sample addr = %p \n\n", sample);
   close (handle);
-
-  if (memcmp (ACTUAL, sample, strlen (sample)))
-    fail ("read of mmap'd file reported bad data");
-
+  // msg("테스트 스크립트 mmap 후 : handle = %p \n\n", ACTUAL);
+  // msg("테스트 스크립트 mmap 후 : handle = %s \n\n", sample);
+  // msg("테스트 스크립트 handle close 후 \n\n");
+  if (memcmp (ACTUAL, sample, strlen (sample))){
+    // msg("테스트 스크립트 if문 true일 때  \n\n");
+    fail ("read of mmap'd file reported bad data");}
+  // msg("테스트 스크립트 if문 false일 때  \n\n");
   munmap (map);
+	// printf("끝?  \n\n");
+
 }

@@ -10,6 +10,7 @@
 
 #include "vm/vm.h"
 #include "vm/uninit.h"
+#include "userprog/process.h"
 
 static bool uninit_initialize (struct page *page, void *kva);
 static void uninit_destroy (struct page *page);
@@ -28,15 +29,15 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 		enum vm_type type, void *aux,
 		bool (*initializer)(struct page *, enum vm_type, void *)) {
 	ASSERT (page != NULL);
-
+	
 	*page = (struct page) {
 		.operations = &uninit_ops,
 		.va = va,
 		.frame = NULL, /* no frame for now */
 		.uninit = (struct uninit_page) {
 			.init = init,
-			.type = type,
-			.aux = aux,
+			.type = type, // market 까지 잘 찍힌 상태
+			.aux = aux, 
 			.page_initializer = initializer,
 		}
 	};
@@ -62,7 +63,9 @@ uninit_initialize (struct page *page, void *kva) {
  * PAGE will be freed by the caller. */
 static void
 uninit_destroy (struct page *page) {
-	struct uninit_page *uninit UNUSED = &page->uninit;
+	struct uninit_page *uninit = &page->uninit;
 	/* TODO: Fill this function.
-	 * TODO: If you don't have anything to do, just return. */
+	 * TODO: If you don't have anything to do, just return. */ 
+
+	return ;
 }

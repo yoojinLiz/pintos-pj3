@@ -18,6 +18,8 @@
 #include "filesys/file.h"
 #include "threads/vaddr.h"
 #include "threads/palloc.h"
+#include "vm/file.h"
+#include "threads/mmu.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -45,7 +47,7 @@ void syscall_handler (struct intr_frame *);
 #define F_ARG5 f->R.r8
 #define F_ARG6 f->R.r9
 
-bool address_check(char *ptr);
+bool address_check(bool write, char *ptr);
 
 int fd_table_get_fd(struct file *_file);
 struct file *fd_table_get_file(int fd);
@@ -100,7 +102,7 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f) {
     ASSERT(0 <= F_RAX && F_RAX < SYSCALL_CNT);
-
+    thread_current()->rsp = f->rsp; 
     struct system_call syscall = syscall_list[F_RAX];
 
     if(syscall.syscall_num == F_RAX) {
@@ -131,7 +133,7 @@ void exec_handler(struct intr_frame *f) {
     char *file_name = (char *)F_ARG1;
     char *new_fname;
 
-    if(!address_check(file_name)) kern_exit(f, -1);
+    if(!address_check(false, file_name)) kern_exit(f, -1);
 
     new_fname = palloc_get_page (0);
     strlcpy(new_fname, file_name, PGSIZE);
@@ -150,7 +152,7 @@ void create_handler(struct intr_frame *f) {
     off_t initial_size = (off_t)F_ARG2;
 
     if(file_name == NULL) kern_exit(f, -1);
-    if(!address_check(file_name)) kern_exit(f, -1);
+    if(!address_check(false, file_name)) kern_exit(f, -1);
     
     lock_acquire(&file_lock);
     F_RAX = filesys_create(file_name, initial_size);
@@ -176,7 +178,7 @@ void open_handler(struct intr_frame *f) {
     int fd = -1;
     
     if(file_name == NULL) kern_exit(f, -1);
-    if(!address_check(file_name)) kern_exit(f, -1);
+    if(!address_check(false, file_name)) kern_exit(f, -1);
 
     lock_acquire(&file_lock);
     o_file = filesys_open(file_name);
@@ -212,7 +214,10 @@ void read_handler(struct intr_frame *f) {
 
     if(fd < 0 || FDLIST_LEN <= fd) kern_exit(f, -1);
     if(fd == 1) kern_exit(f, -1);
-    if(!address_check(buffer)) kern_exit(f, -1);
+    if (!address_check (true, buffer)) kern_exit (f, -1);
+    // if (!spt_find_page (&thread_current ()->spt, buffer)->writable) kern_exit (f, -1);//? 너냐?
+    // if(!address_check(true, buffer)) kern_exit(f, -1);
+    // if(!address_check(true, buffer+size-1)) kern_exit(f, -1);
 
     struct file *file_ = fd_table_get_file(fd);
     if(file_ == NULL) return;
@@ -231,7 +236,8 @@ void write_handler(struct intr_frame *f) {
 
     if(fd <= 0) return;
 
-    if(!address_check(buffer)) kern_exit(f, -1);
+    if(!address_check(false, buffer)) kern_exit(f, -1);
+    if(!address_check(false, buffer+size-1)) kern_exit(f, -1);
 
     if(fd == 1) {
         if(size > 0) {
@@ -295,11 +301,76 @@ void close_handler(struct intr_frame *f) {
 
 /* PROJECT3 ~~~~~ */
 void mmap_handler(struct intr_frame *f) {
+    void *addr = F_ARG1;
+    size_t length = F_ARG2;
+    int writable = F_ARG3;
+    int fd = F_ARG4;
+    off_t offset = F_ARG5;
+    struct supplemental_page_table *spt = &thread_current()->spt; 
 
+    /* Check validity for mmap. */
+    if (fd < 2 || fd_table_get_file(fd) == NULL
+        || addr <= NULL
+        || addr != pg_round_down(addr)
+        || is_kernel_vaddr(addr) || is_kernel_vaddr (addr + length)
+        || (offset % PGSIZE) != 0
+        || length <= 0
+        || length >= 0x8004000000  //? what is it? 
+        || file_length (fd_table_get_file(fd)) <= 0
+        || spt_find_page (spt, pg_round_down(addr))
+    ) {
+        /* mmap validity check failed. */
+        F_RAX = NULL;
+        return ;
+    }  
+    
+    lock_acquire(&file_lock);
+    struct file *file = file_reopen (fd_table_get_file(fd));
+    lock_release(&file_lock);
+    if (file == NULL) {
+        F_RAX = NULL;
+        return;
+    }
+
+    lock_acquire(&file_lock);
+    F_RAX = do_mmap (addr, length, writable, file, offset);
+    lock_release(&file_lock);
 }
 
 void mnumap_handler(struct intr_frame *f) {
+   void *addr = f->R.rdi;
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	struct page *page;
+	int page_cnt;
 
+	/* Check validity for munmap. */
+	if ((page = spt_find_page (spt, addr)) == NULL
+		|| VM_TYPE(page->uninit.type) != VM_FILE
+		|| (page_cnt = page->page_cnt) == 0)
+		return;
+
+	lock_acquire (&spt->spt_lock);
+
+	do_munmap (addr);
+
+	/* Remove from mmap_list. */
+	struct list_elem *e;
+	struct list *list = &spt->mmap_list;
+	for (e = list_begin (list); e != list_end (list); e = list_next (e)) {
+		struct page *p = list_entry (e, struct page, mmap_elem);
+		if (p->va == addr)
+			break;
+	}
+	list_remove (e);
+
+	/* Remove page from SPT. */
+	for (int i=0; i < page_cnt; i++) {
+		page = spt_find_page (spt, addr);
+		spt_remove_page (spt, page);
+		addr += PGSIZE;
+	}
+
+	lock_release (&spt->spt_lock);
 }
 
 void chdir_handler(struct intr_frame *f) {
@@ -341,17 +412,21 @@ void umount_handler(struct intr_frame *f) {
 
 /* 여기서 부터는 system call handler 아님 */
 bool
-address_check(char *ptr) {
-    struct thread *curr = thread_current();
-    if(is_kernel_vaddr(ptr)) {
-        return false;
+address_check(bool write, char *ptr) {
+    if (ptr == NULL){
+        return false ;
     }
-    if (spt_find_page(&thread_current()->spt, ptr)== NULL) {
+    struct thread *curr = thread_current();
+    struct page *p = spt_find_page(&curr->spt, ptr);
+    if (p == NULL) {
         return false;
+    } else {
+        if (write && !p->writable) {
+            return false;
+        }
     }
     return true;
 }
-
 
 void 
 kern_exit(struct intr_frame *f, int status) {
