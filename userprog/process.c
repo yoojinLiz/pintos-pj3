@@ -205,6 +205,13 @@ __do_fork (void **aux) {
     }
 
 	process_activate (current);
+
+	/* Project2: System Calls */
+	if(parent->my_exec_file != NULL) {
+        lock_acquire(&file_lock);
+        current->my_exec_file = file_duplicate(parent->my_exec_file);
+        lock_release(&file_lock);
+    }
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
 	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
@@ -220,12 +227,7 @@ __do_fork (void **aux) {
 	 * TODO:       in include/filesys/file.h. Note that parent should not return
 	 * TODO:       from the fork() until this function successfully duplicates
 	 * TODO:       the resources of parent.*/
-    /* Project2: System Calls */
-	if(parent->my_exec_file != NULL) {
-        lock_acquire(&file_lock);
-        current->my_exec_file = file_duplicate(parent->my_exec_file);
-        lock_release(&file_lock);
-    }
+
     
     for(int i = 0; i < FDLIST_LEN; i++) {
         struct file *p_f = (parent->fd_table)[i];
